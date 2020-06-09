@@ -1,0 +1,7 @@
+name: 'Josiah Venture Pivot Block'
+type: module
+description: 'Shows a Pivot table with data from a dataprocessor'
+core: 8.x
+package: 'JosiahVenture'
+dependencies:
+  - drupal:cmrf_core

@@ -1,0 +1,31 @@
+{#
+/**
+* @file
+* Default theme implementation to display a block.
+*
+* @see template_preprocess_block()
+*
+* @ingroup themeable
+*/
+#}
+{% set classes = [
+    'clear-both',
+] %}
+<p>Dit is een twig template 2</p>
+<table{{ attributes.addClass(classes) }}>
+   <thead>
+   <tr>
+    <th/>
+    {% for value in header %}
+        <th>{{value}}</th>
+    {% endfor %}
+     </tr>
+   </thead>
+  {% for row in rows %}
+    <tr>
+      {% for cell in row %}
+        <td>{{ cell }}</td>
+      {% endfor %}
+    </tr>
+  {% endfor %}
+</table>

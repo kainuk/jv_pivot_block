@@ -1,0 +1,39 @@
+<?php
+
+/**
+ * @file
+ * Contains jv_pivot_block.module.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+
+/**
+ * Implements hook_help().
+ */
+function jv_pivot_block_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    // Main module help for the jv_pivot_block module.
+    case 'help.page.jv_pivot_block':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('Shows a Pivot table with data from a dataprocessor') . '</p>';
+      return $output;
+
+    default:
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function jv_pivot_block_theme() {
+  return [
+    'jv_pivot_block' => [
+      'variables' => [
+        'header' => [],
+        'rows' => [],
+      ],
+      'render element' => 'children',
+    ],
+  ];
+}
