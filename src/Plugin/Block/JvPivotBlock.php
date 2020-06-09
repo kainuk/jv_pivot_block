@@ -1,5 +1,9 @@
 <?php
-
+/**
+ * @author Klaas Eikelboom  <klaas.eikelboom@civicoop.org>
+ * @date 09-Jun-2020
+ * @license  AGPL-3.0
+ */
 namespace Drupal\jv_pivot_block\Plugin\Block;
 
 use Drupal\Core\Block\BlockBase;
@@ -33,79 +37,109 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
     return $instance;
   }
 
-  public function pivot(){
-    $data = $this->readData();
+  /**
+   * Formats and returns the pivot table
+   *
+   * @return array
+   */
+  public function pivot($data ){
     $pivotTable = [];
-    $labelColumn='frequency';
-    $headerColumn='phases';
-    $pv1='event_name';
-    $pv2='participants';
-    // labels
+    $pivotcell1=$this->configuration['pivotCell_1'];
+    $pivotcell2=$this->configuration['pivotCell_2'];
+
     $labels =  $labelsCount = $headers = [];
     foreach($data as $row){
-      $label = $row[$labelColumn];
-      $header = $row[$headerColumn];
+      $label = $row[$this->configuration['labelColumn']];
+      $header = $row[$this->configuration['headerColumn']];
       if(!in_array($label,$labels)){
         $labels[]= $label;
       }
       if(!in_array($header,$headers)){
         $headers[]= $header;
       };
-      $values = [$row[$pv1],$row[$pv2]];
+      $values = [$row[$pivotcell1],$row[$pivotcell2]];
       if(!isset($pivotTable[$label])){
         $pivotTable[$label] = [];
       }
       $pivotTable[$label][$header][]= $values;
     }
-    $result = [];
+    $pivotTableResult = [];
     $rownum = 0;
     foreach($labels as $label){
       $max=0;
-      $result[$rownum++]=[];
+      $pivotTableResult[$rownum++]=[];
       foreach($headers as $header){
         if(isset($pivotTable[$label][$header])) {
           $max = max(count($pivotTable[$label][$header]) - 1, $max);
         }
       }
       for($i=0;$i<= $max; $i++){
-        $result[$rownum][]=$i==0?$label:"";
+        $pivotTableResult[$rownum][]=$i==0?$label:"";
         foreach($headers as $header){
           list($cell1,$cell2) = isset($pivotTable[$label][$header][$i])?$pivotTable[$label][$header][$i]:["",""];
-          $result[$rownum][] = $cell1;
-          $result[$rownum][] = $cell2;
+          $pivotTableResult[$rownum][] = $cell1;
+          $pivotTableResult[$rownum][] = $cell2;
         }
         $rownum++;
       }
     }
-
-    $headerResult[]=[''];
+    $headerResult[]=[''];  // upper left corner is empty
     foreach($headers as $header){
+      // two cells are shown with the seam heading
+      // so span this heading accros two collumns
       $headerResult[]=['data'=>$header,'colspan'=>2];
     }
-    return [$headerResult,$result];
+    return [$headerResult,$pivotTableResult];
   }
 
+  /**
+   * Reads the data from the configured connection
+   * @return mixed
+   */
   public function readData(){
-    $call = $this->core->createCall($this->configuration['connection'],'activityministrymapping','get',\Drupal::request()->query->all(),['sort' => ['frequency','phases']],null);
+    $call = $this->core->createCall(
+      $this->configuration['connection'],
+      $this->configuration['entity'],
+      'get',
+      \Drupal::request()->query->all(),
+      ['sort' => [$this->configuration['labelColumn'],$this->configuration['headerColumn']]],
+      null);
     $result = $this->core->executeCall($call);
-    return $result['values'];
+    return $result;
   }
 
   /**
    * {@inheritdoc}
    */
   public function build() {
-    list($headers,$pivotTable) = $this->pivot();
-    $build[]= [
-      '#type' => 'table',
-      '#header' => $headers,
-      '#rows'   => $pivotTable,
-    ];
+    if ($this->configuration['connection']) {
+      $result = $this->readData();
+      if($result['is_error']){
+        $build['#markup'] = t('Api Error @m',['@m'=>$result['error_message']]);
+      } else {
+      list($headers, $pivotTable) = $this->pivot($result['values']);
+      $build[] = [
+        '#type' => 'table',
+        '#header' => $headers,
+        '#rows' => $pivotTable,
+      ];
+    }}
+    else {
+      $build['#markup'] = t('No connection configured, no pivot table shown');
+    }
     return $build;
   }
 
+  /**
+   * Configure the block - you can opt for the connection - the dataprocessor
+   * is hardcoded.
+   *
+   * @param array $form
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *
+   * @return array|mixed
+   */
   public function blockForm($form, FormStateInterface $form_state) {
-
     $build['connection'] = [
       '#type' => 'select',
       '#title' => $this->t('Connector'),
@@ -113,14 +147,53 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
       '#options' => $this->core->getConnectors(),
       '#default_value' => $this->configuration['connection'],
     ];
+    $build['entity'] = [
+      '#type' => 'textfield',
+      '#title' => t('Api Entity'),
+      '#default_value' => isset($this->configuration['entity'])?$this->configuration['entity']:'activityministrymapping',
+    ];
+    $build['labelColumn'] = [
+      '#type' => 'textfield',
+      '#title' => t('Label Column'),
+      '#default_value' =>  isset($this->configuration['labelColumn'])?$this->configuration['labelColumn']:'frequency',
+    ];
+    $build['headerColumn'] = [
+      '#type' => 'textfield',
+      '#title' => t('Header Column'),
+      '#default_value' => isset($this->configuration['headerColumn'])?$this->configuration['headerColumn']:'phases',
+    ];
+    $build['pivotCell_1'] = [
+      '#type' => 'textfield',
+      '#title' => t('Pivot Cell 1'),
+      '#default_value' => isset($this->configuration['pivotCell_1'])?$this->configuration['pivotCell_1']:'event_name',
+    ];
+    $build['pivotCell_2'] = [
+      '#type' => 'textfield',
+      '#title' => t('Pivot Cell 2'),
+      '#default_value' => isset($this->configuration['pivotCell_2'])?$this->configuration['pivotCell_2']:'participants',
+    ];
     return $build;
   }
 
+  /**
+   * Save the configuration form
+   * @param array $form
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   */
   public function blockSubmit($form, FormStateInterface $form_state) {
     $values = $form_state->getValues();
     $this->configuration['connection']=$values['connection'];
+    $this->configuration['entity']=$values['entity'];
+    $this->configuration['labelColumn']=$values['labelColumn'];
+    $this->configuration['headerColumn']=$values['headerColumn'];
+    $this->configuration['pivotCell_1']=$values['pivotCell_1'];
+    $this->configuration['pivotCell_2']=$values['pivotCell_2'];
   }
 
+  /**
+   * No caching, each refresh the latest data is shown.
+   * @return int
+   */
   public function getCacheMaxAge() {
     return 0;
   }
