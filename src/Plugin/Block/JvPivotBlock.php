@@ -6,6 +6,7 @@
  */
 namespace Drupal\jv_pivot_block\Plugin\Block;
 
+use Civi\ActionProvider\Condition\ParameterHasValue;
 use Drupal\Core\Block\BlockBase;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -35,6 +36,40 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
     $instance = new static($configuration, $plugin_id, $plugin_definition);
     $instance->core = $container->get('cmrf_core.core');
     return $instance;
+  }
+
+  public function translateOptions($data){
+    $result = [];
+    foreach($data as $row){
+      if(isset($row[$this->configuration['labelColumn']]) && isset($this->configuration['labelOptions'])){
+        $lookup = $row[$this->configuration['labelColumn']];
+        $options = $this->configuration['labelOptions'];
+        if(key_exists($lookup,$options)){
+          $row[$this->configuration['labelColumn']] = $options[$lookup];
+        }
+      }
+      if(isset($row[$this->configuration['headerColumn']]) && isset($this->configuration['headerOptions'])){
+        $lookup = $row[$this->configuration['headerColumn']];
+        $options = $this->configuration['headerOptions'];
+        if(key_exists($lookup,$options)){
+          $row[$this->configuration['headerColumn']] = $options[$lookup];
+        }
+      }
+      $result[]=$row;
+    }
+    return $result;
+  }
+
+  public function duplicate($data,$column){
+    $result=[];
+    foreach($data as $row){
+      $values = explode(',',$row[$column]);
+      foreach($values as $value){
+        $row[$column] = $value;
+        $result[]=$row;
+      }
+    }
+    return $result;
   }
 
   /**
@@ -114,16 +149,22 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
   public function build() {
     if ($this->configuration['connection']) {
       $result = $this->readData();
-      if($result['is_error']){
-        $build['#markup'] = t('Api Error @m',['@m'=>$result['error_message']]);
-      } else {
-      list($headers, $pivotTable) = $this->pivot($result['values']);
-      $build[] = [
-        '#type' => 'table',
-        '#header' => $headers,
-        '#rows' => $pivotTable,
-      ];
-    }}
+      if ($result['is_error']) {
+        $build['#markup'] = t('Api Error @m', ['@m' => $result['error_message']]);
+      }
+      else {
+        $data = $result['values'];
+        $data = $this->duplicate($data,$this->configuration['labelColumn']);
+        $data = $this->duplicate($data,$this->configuration['headerColumn']);
+        $data = $this->translateOptions($data);
+        list($headers, $pivotTable) = $this->pivot($data);
+        $build[] = [
+          '#type' => 'table',
+          '#header' => $headers,
+          '#rows' => $pivotTable,
+        ];
+      }
+    }
     else {
       $build['#markup'] = t('No connection configured, no pivot table shown');
     }
@@ -188,6 +229,25 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
     $this->configuration['headerColumn']=$values['headerColumn'];
     $this->configuration['pivotCell_1']=$values['pivotCell_1'];
     $this->configuration['pivotCell_2']=$values['pivotCell_2'];
+
+    if(isset($this->configuration)){
+      $call = $this->core->createCall(
+        $this->configuration['connection'],
+        $this->configuration['entity'],
+        'getfields',
+        ['api_action' => "get"],
+        null,
+        null);
+      $result = $this->core->executeCall($call);
+      if(!$result['is_error']){
+        if(isset($result['values'][$this->configuration['labelColumn']]) && isset($result['values'][$this->configuration['labelColumn']]['options'])){
+          $this->configuration['labelOptions'] = $result['values'][$this->configuration['labelColumn']]['options'];
+        }
+        if(isset($result['values'][$this->configuration['headerColumn']]) && isset($result['values'][$this->configuration['headerColumn']]['options'])){
+          $this->configuration['headerOptions'] = $result['values'][$this->configuration['headerColumn']]['options'];
+        }
+      }
+    }
   }
 
   /**
