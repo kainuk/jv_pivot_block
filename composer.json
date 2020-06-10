@@ -1,0 +1,13 @@
+{
+    "name": "drupal/jv_pivot_block",
+    "type": "drupal-module",
+    "description": "Pivot block for the JV pages",
+    "keywords": [
+    ],
+    "homepage": "https://www.drupal.org/project/jv_tabs",
+    "minimum-stability": "dev",
+    "support": {
+        "issues": "https://issues.civioop.org",
+        "source": "https://github.com/kainuk/jv_pivot_block"
+    }
+}
