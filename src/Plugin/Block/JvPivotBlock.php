@@ -118,6 +118,7 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
         $rownum++;
       }
     }
+    asort($headers);
     $headerResult[]=[''];  // upper left corner is empty
     foreach($headers as $header){
       // two cells are shown with the seam heading
