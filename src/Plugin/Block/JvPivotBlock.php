@@ -6,7 +6,6 @@
  */
 namespace Drupal\jv_pivot_block\Plugin\Block;
 
-use Civi\ActionProvider\Condition\ParameterHasValue;
 use Drupal\Core\Block\BlockBase;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -38,6 +37,13 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
     return $instance;
   }
 
+  /**
+   * If the dataprocessor has optionlists defined used them for translation of the
+   * header and label columns - (The views doe this stuff, so this block follows).
+   * @param $data
+   *
+   * @return array
+   */
   public function translateOptions($data){
     $result = [];
     foreach($data as $row){
@@ -60,6 +66,28 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
     return $result;
   }
 
+  /**
+   * Sometimes a column has multiple values seperated by a ,
+   * This function duplicates the row with single values
+   * Example:
+   *   [["a","b,c","d"],
+   *    ["a","e","d"],
+   *    ["l","k,l,p", "e"]
+   *   ]
+   * becomes:
+   *   [["a","b","d"],
+   *    ["a","c","d"],
+   *    ["a","e","d"],
+   *    ["l","k", "e"]
+   *    ["l","l", "e"]
+   *    ["l","p", "e"]
+   * ]
+   *
+   * @param $data
+   * @param $column
+   *
+   * @return array
+   */
   public function duplicate($data,$column){
     $result=[];
     foreach($data as $row){
@@ -83,6 +111,8 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
     $pivotcell2=$this->configuration['pivotCell_2'];
 
     $labels =  $labelsCount = $headers = [];
+    // determine labels and headers and put the data in a array
+    // that indexed by these labels and headers
     foreach($data as $row){
       $label = $row[$this->configuration['labelColumn']];
       $header = $row[$this->configuration['headerColumn']];
@@ -92,22 +122,28 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
       if(!in_array($header,$headers)){
         $headers[]= $header;
       };
+      // only the pivot cells are copied, the others are ignored.
+      // TODO this is the place to create the link
       $values = [$row[$pivotcell1],$row[$pivotcell2]];
       if(!isset($pivotTable[$label])){
         $pivotTable[$label] = [];
       }
       $pivotTable[$label][$header][]= $values;
     }
+    // flatten the table
+    // a label can have multiple rows
+    // these are calculated below
     $pivotTableResult = [];
-    $rownum = 0;
+    $rownum = 0; // the index of the flattenend table
     foreach($labels as $label){
-      $max=0;
+      $max=0; // the maximun nr of rows
       $pivotTableResult[$rownum++]=[];
       foreach($headers as $header){
         if(isset($pivotTable[$label][$header])) {
           $max = max(count($pivotTable[$label][$header]) - 1, $max);
         }
       }
+      // now the nr of rows is known they can be filled with the values
       for($i=0;$i<= $max; $i++){
         $pivotTableResult[$rownum][]=$i==0?$label:"";
         foreach($headers as $header){
@@ -145,6 +181,7 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
   }
 
   /**
+   * Build the pivot block (This function is picked up by the plugin)
    * {@inheritdoc}
    */
   public function build() {
@@ -173,8 +210,7 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
   }
 
   /**
-   * Configure the block - you can opt for the connection - the dataprocessor
-   * is hardcoded.
+   * Configure the block
    *
    * @param array $form
    * @param \Drupal\Core\Form\FormStateInterface $form_state
@@ -224,13 +260,15 @@ class JvPivotBlock extends BlockBase implements ContainerFactoryPluginInterface 
    */
   public function blockSubmit($form, FormStateInterface $form_state) {
     $values = $form_state->getValues();
+    // standard saving stuff
     $this->configuration['connection']=$values['connection'];
     $this->configuration['entity']=$values['entity'];
     $this->configuration['labelColumn']=$values['labelColumn'];
     $this->configuration['headerColumn']=$values['headerColumn'];
     $this->configuration['pivotCell_1']=$values['pivotCell_1'];
     $this->configuration['pivotCell_2']=$values['pivotCell_2'];
-
+    // However - if dataprocessor field is known - check if there are
+    // possible optionList - fetch them and store them in the configuration
     if(isset($this->configuration)){
       $call = $this->core->createCall(
         $this->configuration['connection'],
